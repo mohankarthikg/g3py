@@ -3,13 +3,33 @@ import numpy as np
 import uproot as up
 from functools import reduce
 import pickle
-import CoordTransform as CT
-from fiducial import check_within_fiducial
-from funcs import distance_based_cut
-import g3dir
+from . import CoordTransform as CT
+from .fiducial import check_within_fiducial
+from .funcs import distance_based_cut
+from . import g3dir
 
 
 class Sim:
+    """
+    An obj which can get/handle Monte Carlo data after
+    applying basic cuts on Monte Carlo data.
+
+    ...
+
+    Attributes
+    ----------
+    name : str
+        first name of the person
+    surname : str
+        family name of the person
+    age : int
+        age of the person
+
+    Methods
+    -------
+    info(additional=""):
+        Prints the person's name and age.
+    """
 
     def __init__(self):
 

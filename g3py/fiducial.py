@@ -6,6 +6,22 @@ def sign(p1, p2, p3):
 
 
 def check_within_fiducial(CoreX, CoreY):
+    """
+    Checks if reconstructed core position is within fiducial area.
+
+    Parameters
+    ----------
+
+    CoreX: float / array
+        X coord. of rec. shower core.
+    CoreY: float / array
+        Y coord of rec. shower core.
+ 
+    Returns
+    -------
+    out: array or bool
+        return TRUE if rec. core inside fiducial area.
+    """
     x = np.array(CoreX)
     y = np.array(CoreY)
     v0, v1, v2, v3, v4, v5 = [

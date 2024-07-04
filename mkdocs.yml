@@ -1,0 +1,26 @@
+site_name: g3py 
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - psLLH: psLLH.md
+  - CoordTransform: CoordTransform.md
+  - fiducial: fiducial.md
+
+theme:
+  name: readthedocs
+
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            members_order: source
+            summary: true
+markdown_extensions:
+  - toc:
+      permalink: true
+

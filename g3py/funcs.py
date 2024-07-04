@@ -4,6 +4,26 @@ from datetime import datetime, timedelta
 
 
 def generate_dates(start_date_str, end_date_str):
+    """
+
+    generates list of dates between given start date and end date including both.
+ 
+    Parameters
+    ----------
+ 
+    start_date_str : str
+        fmt: "YYYYMMDD"
+
+    end_date_str : str
+        fmt: "YYYYMMDD"
+  
+    Returns
+    -------
+
+    out: list
+
+    """
+
     date_format = "%Y%m%d"  # Adjust the format to match your date strings
     start_date = datetime.strptime(start_date_str, date_format)
     end_date = datetime.strptime(end_date_str, date_format)
@@ -19,6 +39,31 @@ def generate_dates(start_date_str, end_date_str):
 
 
 def spaceAngle(theta1, phi1, theta2, phi2, rad=False):
+    """
+      calculates angular distance between (theta1, phi) & (theta2, phi2).
+      all inputs should be in the units deg. if rad is set FALSE.
+      outputs are in the units deg, if rad is set FALSE.
+ 
+      Parameters
+      ----------
+  
+      theta1 : float or array
+	  zenith - 1	
+
+      phi1 : float or array
+          azimuth - 1
+
+      theta2: float or array
+          zenith - 2
+
+      phi2: float or array
+          azimuth - 2 
+      Returns
+      -------
+      out: array 
+          angular distance 
+    """
+
     if rad == False:
         theta1 = np.radians(theta1)
         phi1 = np.radians(phi1)

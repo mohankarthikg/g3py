@@ -1,25 +1,86 @@
 from iminuit import cost, Minuit
 import numpy as np
-from funcs import spaceAngle as sA
-import CoordTransform as CT
-from astropy.coordinates import SkyCoord
-import astropy.units as u
+from .funcs import spaceAngle as sA
+from . import CoordTransform as CT
 import pickle
-import IRF
+from . import IRF
 
 
 class ps:
-    def __init__(self, Srcdec, SrcRA, data):
+    """
+    An point source Likelihood obj. which can generate TS distribution for
+    bg. only hypothesis and sig. + bg. hypothesis.
+    ...
+
+    Attributes
+    ----------
+
+    Srcdec : float
+        Declination of point src. in deg.
+
+    Srcra : float
+        RightAscension of point src. in deg.
+
+    data : dict
+        Dict. consisting of numpy arrays of evt. info. atleast EVDec, EvRA, NKGSize
+
+    psrcsim : dict
+        Dict. consisting of numpy arrays of simulated gamma evt. info. atleast EVDec, EvRA, NKGSize.
+
+    n: int
+        n is the average of poisson distrubtion of source events injected after drawing from psrcsim
+
+    inj: bool
+        If TRUE point source simulation will be injected before calculating TS.
+
+    Methods
+    -------
+
+    """
+
+    def __init__(self, Srcdec, SrcRA, data, psrcdata=None, n=0, inj = False):
+        """
+        Constructs all the necessary attributes for the point source Likelihood obj.
+
+        Parameters
+        ----------
+        Srcdec : float
+            Declination of point src. in deg.
+
+        Srcra : float
+            RightAscension of point src. in deg.
+
+        data : dict
+            Dict. consisting of numpy arrays of evt. info. atleast EVDec, EvRA, NKGSize
+
+        psrcsim : dict
+            Dict. consisting of numpy arrays of simulated gamma evt. info. atleast EVDec, EvRA, NKGSize.
+
+        n: int
+            n is the average of poisson distrubtion of source events injected after drawing from psrcsim
+        
+        inj: bool
+            If TRUE point source simulation will be injected before calculating TS.
+        """
 
         self.Srcdec = Srcdec
         self.SrcRA = SrcRA
 
-        with open(f"tesrSrcAltAz_{self.Srcdec}_{self.SrcRA}.pkl", "rb") as file:
-            self.SrcAz, self.SrcAlt = pickle.load(file)
-        # self.SrcAz, self.SrcAlt =  CT.RADecToAltAz(np.degrees(self.SrcRA), np.degrees(self.Srcdec) ,\
-        #                                            data['EvDate'], data['EvTime1'], data['EvTime2'])
-        # with open('tesrSrcAltAz.pkl', 'wb') as file:
-        #     pickle.dump([self.SrcAz, self.SrcAlt],file)
+        (
+            self.bckg_spt_pdf,
+            self.bckg_spt_cdf,
+            self.bckg_spt_inv_cdf,
+            self.sindec_min,
+            self.sindec_max,
+        ) = IRF.spt_pdf()
+        (
+            self.bckg_spt_en_pdf2,
+            self.sig_en_pdf2,
+            self.sindec_min2,
+            self.sindec_max2,
+            self.log10Ne_min2,
+            self.log10Ne_max2,
+        ) = IRF.spt_en_pdf2()
 
         self.angres = (
             sA(
@@ -33,79 +94,45 @@ class ps:
         )
         self.angres = np.radians(self.angres)
 
-        mask1 = self.angres > 0
-        mask2 = self.SrcAlt > 45
-        mask = mask1  # *(mask2)
+        mask1 = self.angres == self.angres
+        mask2 = np.log10(data["NKGSize"]) < self.log10Ne_max2
+
+        mask = (mask1) * (mask2)
         self.angres = self.angres[mask]
 
-        self.SrcAz = np.radians(self.SrcAz)[mask]
-        self.SrcAlt = np.radians(self.SrcAlt)[mask]
+        self.data = {}
+        
+        self.data["evsindec"] = np.sin(np.radians(data["EvDec1"][mask]))
+        self.data["evra"] = np.radians(data["EvRa1"][mask])
+        self.data["evlog10Ne"] = np.log10(data["NKGSize"][mask])
 
-        self.Srcsinalt = np.sin(self.SrcAlt)
+        if psrcdata is not None:
 
-        (
-            self.bckg_spt_pdf,
-            self.bckg_spt_cdf,
-            self.bckg_spt_inv_cdf,
-            self.sindec_min,
-            self.sindec_max,
-        ) = IRF.spt_pdf()
+            self.psrc = {}
+            self.psrc["evsindec"] = np.sin(np.radians(psrcdata["EvDec1"]))
+            self.psrc["evra"] = np.radians(psrcdata["EvRa1"])
+            self.psrc["evlog10Ne"] = np.log10(psrcdata["NKGSize"])
 
-        (
-            self.bckg_spt_pdf2,
-            self.bckg_spt_pdf3,
-            self.bckg_spt_pdf4,
-            self.alt_min,
-            self.alt_max,
-            self.sinalt_min,
-            self.sinalt_max,
-        ) = IRF.spt_pdf2()
 
-        (
-            self.bckg_spt_en_pdf,
-            self.sig_en_pdf,
-            self.log10Ne_min,
-            self.log10Ne_max,
-            self.alt_min2,
-            self.alt_max2,
-            self.bg_norm,
-        ) = IRF.spt_en_pdf()
+        self.inj = inj
+        self.n = n
 
-        self.bckg_phi_pdf, self.phi_min, self.phi_max = IRF.spt_phi_pdf()
-
-        self.evsindec = np.sin(np.radians(data["EvDec1"][mask]))
-        self.evra = np.radians(data["EvRa1"][mask])
-
-        self.evsinAlt = np.sin(np.radians(90 - data["Theta1"][mask]))
-        self.evlog10Ne = np.log10(data["NKGSize"][mask])
-        self.evAz = np.radians(data["Phi1"][mask])
-
-        self.gam = 2.2
-
-    @staticmethod
-    def AltAzcache(Srcdec, SrcRA):
-        SrcAz, SrcAlt = CT.RADecToAltAz(
-            SrcRA, Srcdec, data["EvDate"], data["EvTime1"], data["EvTime2"]
-        )
-        with open(f"tesrSrcAltAz_{Srcdec}_{SrcRA}.pkl", "wb") as file:
-            pickle.dump([SrcAz, SrcAlt], file)
+        # self.gam = 2.2
 
     def ClassicPdf(self, x, f):
 
         Srcdec = self.Srcdec
         SrcRA = self.SrcRA
         sindec, RA = x
-        # angres = np.radians(.83)
+        angres = np.radians(0.83)
 
-        # srcCord = SkyCoord(ra = SrcRA * u.rad, dec = Srcdec * u.rad, frame='icrs')
-        # coords = SkyCoord(ra = RA * u.rad, dec = np.arcsin(sindec) * u.rad, frame='icrs')
-        # spcAng = srcCord.separation(coords).radian
-
-        spcAng = sA(np.arcsin(sindec), RA, Srcdec, SrcRA, rad=True)
+        spcAng = sA(
+            np.arcsin(sindec), RA, np.radians(Srcdec), np.radians(SrcRA), rad=True
+        )
 
         s = (
-            (1 / (2 * np.pi * (self.angres**2)))
-            * np.exp(-(spcAng**2) / (2 * self.angres**2))
+            (1 / (2 * np.pi * (angres**2)))
+            * np.exp(-(spcAng**2) / (2 * angres**2))
             * (f)
         )
 
@@ -113,149 +140,117 @@ class ps:
 
         return s + b
 
-    def SpatialEnergyPdf(self, x, f):
+    def SpatialEnergyPdf_gamma(self, x, f, gam):
 
-        Srcsinalt = self.Srcsinalt
-        SrcAz = self.SrcAz
+        Srcdec = self.Srcdec
+        SrcRA = self.SrcRA
 
-        evlog10Ne, evalt, evaz, Srcsinalt, SrcAz, angres = x
+        evlog10Ne, evsindec, evra, evangres = x
 
-        spcAng = sA(evalt, evaz, np.arcsin(Srcsinalt), SrcAz, rad=True)
+        evangres = np.radians(0.83)  # evangres
+
+        spcAng = sA(
+            np.arcsin(evsindec), evra, np.radians(Srcdec), np.radians(SrcRA), rad=True
+        )
 
         s = (
-            (1 / (2 * np.pi * (angres**2)))
-            * np.exp(-(spcAng**2) / (2 * angres**2))
-            * self.sig_en_pdf((self.gam, evlog10Ne, np.sin(evalt)))
+            (1 / (2 * np.pi * (evangres**2)))
+            * np.exp(-(spcAng**2) / (2 * evangres**2))
+            * np.exp(self.sig_en_pdf2((np.sin(np.radians(Srcdec)), evlog10Ne, gam)))
             * f
         )
 
         b = (
-            np.exp(self.bckg_phi_pdf(evaz))
-            * self.bckg_spt_en_pdf((evlog10Ne, np.sin(evalt)))
+            (1 / (2 * np.pi))
+            * np.exp(self.bckg_spt_en_pdf2((evsindec, evlog10Ne)))
             * (1 - f)
         )
 
         return s + b
 
-    def SpatialEnergyPdf2(self, x, f):
+    def TSClassicpdf(self, seed):
+        """
 
-        Srcsinalt = self.Srcsinalt
-        SrcAz = self.SrcAz
+        Calculates Test Statistic -2*ln( LLH(0)/LLH( ns, gamma) ).
 
-        evlog10Ne, evalt, evaz, Srcsinalt, SrcAz, angres = x
+        Parameters
+        ----------
 
-        spcAng = sA(evalt, evaz, np.arcsin(Srcsinalt), SrcAz, rad=True)
+        seed: int
+            seed for the scrambling of right ascension of background events (data)
 
-        s = (
-            (1 / (2 * np.pi * (angres**2)))
-            * np.exp(-(spcAng**2) / (2 * angres**2))
-            * self.sig_en_pdf((self.gam, evlog10Ne, np.sin(evalt)))
-            * f
-        )
+        Returns
+        -------
 
-        b = (
-            np.exp(self.bckg_phi_pdf(evaz))
-            * self.bckg_spt_en_pdf((evlog10Ne, np.sin(evalt)))
-            * (1 - f)
-        )
+        TS: float
 
-        return s + b
+        NLL: float
+            minimum value of Negative Log Likelihood
 
-    def LocalSpatialPdf(self, x, f):
+        f: float
+            optimum value of source strength - ns, lies in [-1,1]
 
-        evalt, evaz, Srcsinalt, SrcAz, angres = x
+        valid: bool
+            True / 1 if minimum of NLL satisfies iminuit valid minimum conditions.
+        seed: int
+            same as the seed set above
+        Ntot: int
+            total number of events
 
-        spcAng = sA(evalt, evaz, np.arcsin(Srcsinalt), SrcAz, rad=True)
-        s = (
-            (1 / (2 * np.pi * (angres**2)))
-            * np.exp(-(spcAng**2) / (2 * angres**2))
-            * (np.degrees(np.arcsin(Srcsinalt)) > 45)
-            * f
-        )
+        method: int
+            method used to minimize.
+            1 - 'Minuit.migrad'
+            2 - 'Powell'
+            3 - 'Nelder-Mead'
+            4 - 'L-BFGS-B'
+            5 - 'SLSQP'
+            6 - 'Minuit.scan'
 
-        # b = (1/(2*np.pi))*np.exp(self.bckg_spt_pdf2(evalt))*(1-f)/np.cos(evalt)
-        # b = (1/(2*np.pi))*self.bckg_spt_pdf4(np.sin(evalt))*(1-f)
-        b = (
-            np.exp(self.bckg_phi_pdf(evaz))
-            * self.bckg_spt_pdf4(np.sin(evalt))
-            * (1 - f)
-        )
+            tries to minimize the NLL in this order if a method fails to minimize.
+        """
 
-        return s + b
+        np.random.seed(seed)
 
-    def fun(self, i):
+        
+        
+        if self.inj:
 
-        np.random.seed(i)
+            psrc = self.inject(seed, self.psrc)
 
-        # Ntot = 1337857
-        # sindec = np.random.uniform(self.sindec_min,self.sindec_max,2*Ntot)
-        # sindec = sindec[ np.random.uniform(0,1.3,2*Ntot) < np.exp(self.bckg_pdf(sindec)) ]
-        # ra = np.random.uniform(0,2*np.pi, sindec.shape[0])
+            sindec = np.concatenate([self.data["evsindec"], psrc["evsindec"]])
+            ra = np.concatenate([np.random.permutation(self.data["evra"]),  psrc["evra"]])
+            
+        else:
+            sindec = self.data["evsindec"]
+            ra = np.random.permutation(self.data["evra"])
 
-        sindec = self.evsindec
-        ra = np.random.permutation(self.evra)
+        Ntot = sindec.shape[0]
+            
 
         NLL = cost.UnbinnedNLL((sindec, ra), self.ClassicPdf)
 
-        m = Minuit(NLL, f=np.random.uniform(-0.0002, 0.1))
-        m.limits["f"] = (0, 1)
+        m = Minuit(NLL, f=np.random.uniform(0, 0.1))
+        m.limits["f"] = (-0.0001, 1)
         m.tol = 10**-5
-        m.errordef = 0.5
-        m.precision = 2**-90
-        m.print_level = 0
+        m.precision = 2**-100
         m.scan(ncall=10)
+
         m.migrad()
 
-        return (
-            (NLL(0) - NLL(m.values["f"])),
-            NLL(0),
-            NLL(1),
-            NLL(m.values["f"]),
-            m.values["f"],
-            m.valid,
-            i,
-        )
+        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
+            return (
+                (NLL(0) - NLL(m.values["f"])),
+                NLL(0),
+                NLL(1),
+                NLL(m.values["f"]),
+                m.values["f"],
+                m.valid,
+                seed,
+                Ntot,
+                1
+            )  # , m, NLL
 
-    def help(self, NLL, tol, method, init):
-
-        m = Minuit(NLL, f=init)
-        m.limits["f"] = (0, 1)  # (-.0001,1)
-        m.tol = tol
-        m.errordef = 0.5
-        m.precision = 2**-100
-
-        m.scipy(method=method)
-
-        return m
-
-    def fun2(self, i):
-
-        np.random.seed(i)
-
-        Ntot = self.Srcsinalt.shape[0]
-        evlog10Ne = self.evlog10Ne
-        # evlog10Ne = np.random.uniform(self.log10Ne_min, self.log10Ne_max, Ntot)
-        evalt = np.arcsin(self.evsinAlt)
-
-        # evlog10Ne = np.random.uniform(self.log10Ne_min, self.log10Ne_max, 3*Ntot)
-        # evalt = np.random.uniform(self.alt_min2,self.alt_max2,3*Ntot)
-
-        # mask = np.random.uniform(0,3,3*Ntot) <  np.exp(self.bckg_spt_en_pdf((evlog10Ne, evalt)))
-        # evalt = evalt[mask]
-        # evlog10Ne = evlog10Ne[mask]
-
-        evaz = np.random.permutation(self.evAz)
-
-        # evaz = np.random.uniform(0,2*np.pi, evalt.shape[0])
-        # angres = np.radians(.83)*np.ones(evalt.shape[0])
-        NLL = cost.UnbinnedNLL(
-            (evlog10Ne, evalt, evaz, self.Srcsinalt, self.SrcAz, self.angres),
-            self.SpatialEnergyPdf,
-        )
-        # NLL = cost.UnbinnedNLL((evlog10Ne, evalt, evaz, .85*np.ones(evalt.shape[0]), np.radians(180)*np.ones(evalt.shape[0]),\
-        #                        np.radians(.83)*np.ones(evalt.shape[0])), self.SpatialEnergyPdf)
-
-        m = self.help(NLL, tol=10**-5, method="Powell", init=0)
+        m.scipy(method="Powell")
 
         if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
             return (
@@ -265,13 +260,26 @@ class ps:
                 NLL(m.values["f"]),
                 m.values["f"],
                 m.valid,
-                i,
+                seed,
                 Ntot,
-                m,
-                NLL,
-            )
+                2
+            )  # , m, NLL
 
-        m = self.help(NLL, tol=10**-5, method="Powell", init=np.random.uniform(0, 0.1))
+        m.scipy(method="Nelder-Mead")
+        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
+            return (
+                (NLL(0) - NLL(m.values["f"])),
+                NLL(0),
+                NLL(1),
+                NLL(m.values["f"]),
+                m.values["f"],
+                m.valid,
+                seed,
+                Ntot,
+                3
+            )  # , m, NLL
+
+        m.scipy(method="L-BFGS-B")
 
         if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
             return (
@@ -281,13 +289,12 @@ class ps:
                 NLL(m.values["f"]),
                 m.values["f"],
                 m.valid,
-                i,
+                seed,
                 Ntot,
-                m,
-                NLL,
-            )
+                4
+            )  # , m, NLL
 
-        m = self.help(NLL, tol=10**-4, method="Powell", init=np.random.uniform(0, 0.1))
+        m.scipy(method="SLSQP")
 
         if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
             return (
@@ -297,47 +304,13 @@ class ps:
                 NLL(m.values["f"]),
                 m.values["f"],
                 m.valid,
-                i,
+                seed,
                 Ntot,
-                m,
-                NLL,
-            )
-
-        m = self.help(NLL, tol=10**-5, method="Nelder-Mead", init=0)
-
-        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
-            return (
-                (NLL(0) - NLL(m.values["f"])),
-                NLL(0),
-                NLL(1),
-                NLL(m.values["f"]),
-                m.values["f"],
-                m.valid,
-                i,
-                Ntot,
-                m,
-                NLL,
-            )
-
-        m = self.help(
-            NLL, tol=10**-4, method="Nelder-Mead", init=np.random.uniform(0, 0.1)
-        )
-
-        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
-            return (
-                (NLL(0) - NLL(m.values["f"])),
-                NLL(0),
-                NLL(1),
-                NLL(m.values["f"]),
-                m.values["f"],
-                m.valid,
-                i,
-                Ntot,
-                m,
-                NLL,
-            )
+                5
+            )  # , m, NLL
 
         m.scan(ncall=10)
+
         return (
             (NLL(0) - NLL(m.values["f"])),
             NLL(0),
@@ -345,148 +318,194 @@ class ps:
             NLL(m.values["f"]),
             m.values["f"],
             m.valid,
-            i,
+            seed,
             Ntot,
-            m,
-            NLL,
-        )
+            6
+        )  # , m, NLL
 
-    def fun3(self, i):
+    def TSSpatialEnergyPdf(self, seed):
+        """
 
-        np.random.seed(i)
+        Calculates Test Statistic -2*ln( LLH(0)/LLH( ns, gamma) ).
 
-        Ntot = self.Srcsinalt.shape[0]  # 1337857
+        Parameters
+        ----------
 
-        evalt = np.arcsin(self.evsinAlt)
+        seed: int
+            seed for the scrambling of right ascension of background events (data)
 
-        # evalt = np.random.uniform(self.alt_min,self.alt_max,3*Ntot)
-        # evalt = evalt[ np.random.uniform(0,9.5,3*Ntot) <  np.exp(self.bckg_spt_pdf2(evalt)) ]
-        # evaz = np.random.uniform(0,2*np.pi, evalt.shape[0])
+        Returns
+        -------
 
-        evaz = np.random.permutation(self.evAz)
-        # NLL = cost.UnbinnedNLL((evalt, evaz, .9*np.ones(evalt.shape[0]), np.radians(180)*np.ones(evalt.shape[0]),\
-        #                      np.radians(.83)*np.ones(evalt.shape[0])), self.LocalSpatialPdf)
+        TS: float
+
+        NLL: float
+            minimum value of Negative Log Likelihood
+
+        f: float
+            optimum value of source strength - ns, lies in [-1,1]
+
+        gam:
+            optimum value of spectral index - gamma, lies in [0,4]
+
+        valid: bool
+            True / 1 if minimum of NLL satisfies iminuit valid minimum conditions.
+        seed: int
+            same as the seed set above
+        Ntot: int
+            total number of events
+
+        method: int
+            method used to minimize.
+            1 - 'Minuit.migrad'
+            2 - 'Powell'
+            3 - 'Nelder-Mead'
+            4 - 'L-BFGS-B'
+            5 - 'SLSQP'
+            6 - 'Minuit.scan'
+
+            tries to minimize the NLL in this order if a method fails to minimize.
+        """
+
+        np.random.seed(seed)
+
+        if self.inj:
+
+            psrc = self.inject(seed, self.psrc)
+            
+            sindec = np.concatenate([self.data["evsindec"], psrc["evsindec"]])
+            ra = np.concatenate([np.random.permutation(self.data["evra"]),  psrc["evra"]])
+            log10Ne = np.concatenate([self.data["evlog10Ne"],  psrc["evlog10Ne"]])
+            evangres = np.radians(.83)*np.ones_like(sindec) #self.angres
+            
+        else:
+            sindec = self.data["evsindec"]
+            ra = np.random.permutation(self.data["evra"])
+            log10Ne = self.data["evlog10Ne"]
+            evangres = np.radians(.83)*np.ones_like(sindec)
+
+        Ntot = sindec.shape[0]
 
         NLL = cost.UnbinnedNLL(
-            (evalt, evaz, self.Srcsinalt, self.SrcAz, self.angres), self.LocalSpatialPdf
-        )
-        # NLL = cost.UnbinnedNLL((evsinalt, evaz, self.Srcsinalt[:evsinalt.shape[0]], self.SrcAz[:evsinalt.shape[0]],\
-        #                      self.angres[:evsinalt.shape[0]] ), self.LocalSpatialPdf)
-
-        m = self.help(NLL, tol=10**-5, method="Powell", init=0)
-
-        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
-            return (
-                (NLL(0) - NLL(m.values["f"])),
-                NLL(0),
-                NLL(1),
-                NLL(m.values["f"]),
-                m.values["f"],
-                m.valid,
-                i,
-                Ntot,
-                m,
-                NLL,
-            )
-
-        m = self.help(NLL, tol=10**-5, method="Powell", init=np.random.uniform(0, 0.1))
-
-        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
-            return (
-                (NLL(0) - NLL(m.values["f"])),
-                NLL(0),
-                NLL(1),
-                NLL(m.values["f"]),
-                m.values["f"],
-                m.valid,
-                i,
-                Ntot,
-                m,
-                NLL,
-            )
-
-        m = self.help(NLL, tol=10**-5, method="Nelder-Mead", init=0)
-
-        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
-            return (
-                (NLL(0) - NLL(m.values["f"])),
-                NLL(0),
-                NLL(1),
-                NLL(m.values["f"]),
-                m.values["f"],
-                m.valid,
-                i,
-                Ntot,
-                m,
-                NLL,
-            )
-
-        # m = self.help(NLL, tol = 10**-5, method='COBYLA', init = 0 )
-
-        # if (NLL(0)- NLL(m.values['f']))>0 and m.valid:
-        #     return (NLL(0)- NLL(m.values['f'])), NLL(0), NLL(1), NLL(m.values['f']), m.values['f'], m.valid, i,  Ntot, m, NLL
-
-        m = self.help(NLL, tol=10**-4, method="Powell", init=np.random.uniform(0, 0.1))
-
-        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
-            return (
-                (NLL(0) - NLL(m.values["f"])),
-                NLL(0),
-                NLL(1),
-                NLL(m.values["f"]),
-                m.values["f"],
-                m.valid,
-                i,
-                Ntot,
-                m,
-                NLL,
-            )
-
-        m = self.help(
-            NLL, tol=10**-4, method="Nelder-Mead", init=np.random.uniform(0, 0.1)
+            (log10Ne, sindec, ra, evangres), self.SpatialEnergyPdf_gamma
         )
 
-        if (NLL(0) - NLL(m.values["f"])) > 0 and m.valid:
-            return (
-                (NLL(0) - NLL(m.values["f"])),
-                NLL(0),
-                NLL(1),
-                NLL(m.values["f"]),
-                m.values["f"],
-                m.valid,
-                i,
-                Ntot,
-                m,
-                NLL,
-            )
+        m = Minuit(NLL, f=np.random.uniform(0, 0.1), gam=np.random.uniform(1.5, 3.5))
+        m.limits["f"] = (-0.0001, 1)
+        m.limits["gam"] = (1, 4)
+        m.tol = 10**-5
+        m.precision = 2**-100
+        m.scan(ncall=10)
 
-        m.scan(ncall=50)
+        m.migrad()
+
+        if (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])) > 0 and m.valid:
+            return (
+                (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])),
+                NLL(m.values["f"], m.values["gam"]),
+                m.values["f"],
+                m.values["gam"],
+                m.valid,
+                seed,
+                Ntot,
+                1,
+            )  # , m, NLL
+
+        m.scipy(method="Powell")
+
+        if (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])) > 0 and m.valid:
+            return (
+                (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])),
+                NLL(m.values["f"], m.values["gam"]),
+                m.values["f"],
+                m.values["gam"],
+                m.valid,
+                seed,
+                Ntot,
+                2,
+            )  # , m, NLL
+
+        m.scipy(method="Nelder-Mead")
+        if (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])) > 0 and m.valid:
+            return (
+                (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])),
+                NLL(m.values["f"], m.values["gam"]),
+                m.values["f"],
+                m.values["gam"],
+                m.valid,
+                seed,
+                Ntot,
+                3,
+            )  # , m, NLL
+
+        m.scipy(method="L-BFGS-B")
+
+        if (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])) > 0 and m.valid:
+            return (
+                (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])),
+                NLL(m.values["f"], m.values["gam"]),
+                m.values["f"],
+                m.values["gam"],
+                m.valid,
+                seed,
+                Ntot,
+                4,
+            )  # , m, NLL
+
+        m.scipy(method="SLSQP")
+
+        if (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])) > 0 and m.valid:
+            return (
+                (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])),
+                NLL(m.values["f"], m.values["gam"]),
+                m.values["f"],
+                m.values["gam"],
+                m.valid,
+                seed,
+                Ntot,
+                5,
+            )  # , m, NLL
+
+        m.scan(ncall=10)
+
         return (
-            (NLL(0) - NLL(m.values["f"])),
-            NLL(0),
-            NLL(1),
-            NLL(m.values["f"]),
+            (NLL(0, 2) - NLL(m.values["f"], m.values["gam"])),
+            NLL(m.values["f"], m.values["gam"]),
             m.values["f"],
+            m.values["gam"],
             m.valid,
-            i,
+            seed,
             Ntot,
-            m,
-            NLL,
-        )
+            6,
+        )  # , m, NLL
 
-    def NLL(self, i):
+    def inject(self, seed, psrcdata):
+        """
 
-        np.random.seed(3)
+        Takes in Monte-Carlo generated point source events and randomly choose events
+        following poisson distribution with average number of events = n.
 
-        Ntot = self.Srcsinalt.shape[0]  # 1337857
-        evlog10Ne = self.evlog10Ne
-        evalt = np.arcsin(self.evsinAlt)
+        Parameters
+        ----------
 
-        evaz = np.random.uniform(0, 2 * np.pi, evalt.shape[0])
+        data : dict
+            contains numpy arrays of declination, right ascension, NKGSize etc.
 
-        NLL_ = cost.UnbinnedNLL(
-            (evlog10Ne, evalt, evaz, self.Srcsinalt, self.SrcAz, self.angres),
-            self.SpatialEnergyPdf,
-        )
+        n : int
+            average of poisson distribution
 
-        return NLL_(i)
+        Returns
+        -------
+
+        out: dict
+            contains numpy arrays of same info. as input (data).
+        """
+        #np.random.seed(seed)
+        NSrcev = np.random.poisson(self.n)
+        Nevs = len(psrcdata[list(psrcdata.keys())[0]])
+        index = np.random.choice(Nevs, NSrcev)
+        out = {}
+        for key in psrcdata:
+            out[key] = psrcdata[key][index]
+
+        return out

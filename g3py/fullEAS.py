@@ -1,10 +1,10 @@
 import os
 import pickle
 import numpy as np
-import CoordTransform as CT
-from EAS import *
-from funcs import generate_dates
-from g3dir import disk
+from . import CoordTransform as CT
+from .EAS import *
+from .funcs import generate_dates
+from .g3dir import disk
 
 class FullEASdata:
 

@@ -5,6 +5,30 @@ import numpy as np
 
 
 def ZenPhiToRADec(theta, phi, EvDate, EvTime1, EvTime2):
+    """
+    Converts from GRAPES-3 Local coordindates to International Celestial Reference System (ICRS).
+
+    Parameters
+    ----------
+
+    theta : float /  array_like 
+        units: deg.
+    phi : float / array_like
+        units: deg.
+    EvDate : int / str / array_like
+        fmt: YYYYMMDD
+    EvTime1 : int / str / array_like 
+        fmt: HHMMSS
+    EvTime2 : int / str /  array_like
+        fmt: 9 digits (GRAPES-3 DAQ resolution is ns)
+    
+    Returns
+    -------
+    RightAscension: float / array
+        units : deg.
+    Declination: float / array 
+        units : deg.
+    """
 
     grapes3loc = EarthLocation(lon=76.7 * u.deg, lat=11.4 * u.deg, height=2200 * u.m)
 
@@ -45,6 +69,38 @@ def ZenPhiToRADec(theta, phi, EvDate, EvTime1, EvTime2):
 
 
 def RADecToAltAz(ra, dec, EvDate, EvTime1, EvTime2):
+    """
+    Converts from International Celestial Reference System (ICRS) to GRAPES-3 local coordinates.
+
+    Parameters
+    ----------
+
+    ra : float or array_like
+        RightAscension.
+        units: deg
+
+    dec : float or array_like
+        Declination.
+        units: deg
+
+    EvDate : int or str or array_like
+        fmt: "YYYYMMDD"
+
+    EvTime1 : int or str or array_like
+        fmt: "HHMMSS"
+
+    EvTime2 : int or str or array_like
+        fmt: 9 digits (GRAPES-3 DAQ resolution is ns)
+
+    Returns
+    -------
+
+    azimuth : float or array of same dim. as input
+        units: deg
+
+    altitude :  float or array of same dim. as input
+        units: deg   
+    """
 
     grapes3loc = EarthLocation(lon=76.7 * u.deg, lat=11.4 * u.deg, height=2200 * u.m)
 
@@ -82,3 +138,5 @@ def RADecToAltAz(ra, dec, EvDate, EvTime1, EvTime2):
     coord = coord.transform_to("altaz")
 
     return (180 - coord.az.degree) % 360, coord.alt.degree
+
+

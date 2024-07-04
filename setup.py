@@ -8,6 +8,9 @@ setup(
     packages=find_packages(),
     install_requires=[
         'numpy',
-        'astropy'  
+        'astropy',
+	'uproot',
+	'iminuit',
+	'scipy' 
     ],
 )

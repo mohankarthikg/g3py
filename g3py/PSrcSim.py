@@ -1,21 +1,21 @@
-from .Sim import *
+from Sim import *
 
 
-class EAS(Sim):
+class PSrcSim(Sim):
 
     def __init__(self):
 
         super().__init__()
 
-        self._MuonVars = g3dir.Data_MuonVars
-        self._ShowerVars = g3dir.Data_ShowerVars
-        self._ShowerPTVars = g3dir.Data_ShowerPTVars
+        self._MuonVars = g3dir.MC_PSim_MuonVars
+
+        self._ShowerVars = g3dir.MC_PSim_ShowerVars
+        self._ShowerPTVars = g3dir.MC_PSim_ShowerPTVars
 
         self.cut = {
             "NKGFitFlag": [0, 3],
             "Theta1": [0, 45],
             "Age": [0.2, 1.8],
-            "MuStatus": [0, 2],
             "nMuonLarge": [-1, 1],
         }
 
@@ -24,55 +24,22 @@ class EAS(Sim):
         self._distcut = None
         self._loadedvar = None
 
-    def loadfiles(
-        self,
-        date=[
-            "20220110",
-            "20220210",
-            "20220310",
-            "20220410",
-            "20220510",
-            "20220610",
-            "20220710",
-            "20220810",
-            "20220910",
-            "20221010",
-            "20221110",
-            "20221210",
-        ],
-    ):
-
-        if isinstance(date, str):
-            dates = [date]
-
-        else:
-            dates = date
+    def loadfiles(self):
 
         files1 = {}
         files2 = {}
         files3 = {}
-        for date in dates:
 
-            year = date[:4]
-            self._muonDir = (
-                "/boson/users/common/FINAL_EAS/" + str(year) + "/" + "MUPAR/"
-            )
-            self._showerDir = (
-                "/boson/users/common/FINAL_EAS/" + str(year) + "/" + "SHPAR/STAGE2/"
-            )
-            self._showerPTDir = "/boson/users/mohan/DataPT/"
+        CA = glob.glob("/boson/users/mohan/PSim/RECO/CORSIKA_ANALYSIS_00????.root")
+        CA = sorted(CA)
+        PT = glob.glob("/boson/users/mohan/PSim/RECO/CORSIKA_ANALYSIS_PT_00????.root")
+        PT = sorted(PT)
+        MU = glob.glob("/boson/users/mohan/PSim/RECO/MuTrack00????.root")
+        MU = sorted(MU)
 
-            if os.path.exists(f"{self._muonDir}mupar{date}.root") and os.path.exists(
-                f"{self._showerDir}sh{date}.root"
-            ):
-
-                files1[f"{self._muonDir}mupar{date}.root"] = "mupar"
-                files2[f"{self._showerDir}sh{date}.root"] = "sh"
-                files3[f"{self._showerPTDir}pt{date}.root"] = "pt"
-
-        self._MuonFiles = files1
-        self._ShowerFiles = files2
-        self._ShowerPTFiles = files3
+        self._MuonFiles = {key: "mupar" for key in MU}
+        self._ShowerFiles = {key: "cor" for key in CA}
+        self._ShowerPTFiles = {key: "pt" for key in PT}
 
     def loadCutvar(
         self,
@@ -81,7 +48,6 @@ class EAS(Sim):
             "nMuonSmall",
             "Age",
             "NKGFitFlag",
-            "MuStatus",
             "NKGSize",
             "NKGX",
             "NKGY",
@@ -105,7 +71,12 @@ class EAS(Sim):
             "NKGY",
             "Theta1",
             "Phi1",
-            "MuStatus",
+            "ThetaOdd1",
+            "ThetaEven1",
+            "Theta6",
+            "Phi6",
+            "ThetaOdd6",
+            "ThetaEven6",
             "Density",
             "DetNo",
             "nHitDetectors",
@@ -127,6 +98,12 @@ class EAS(Sim):
             "NKGY",
             "Theta1",
             "Phi1",
+            "ThetaOdd1",
+            "ThetaEven1",
+            "Theta6",
+            "Phi6",
+            "ThetaOdd6",
+            "ThetaEven6",
             "Density",
             "DetNo",
             "nHitDetectors",
@@ -135,3 +112,5 @@ class EAS(Sim):
     ):
 
         return super().getvar(var=var, cache=cache)
+
+

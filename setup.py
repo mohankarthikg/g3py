@@ -9,8 +9,13 @@ setup(
     install_requires=[
         'numpy',
         'astropy',
-	'uproot',
-	'iminuit',
-	'scipy' 
+        'uproot',
+        'iminuit',
+        'scipy',
+        'MCEq',
+        'pandas'
     ],
+    extras_require={
+        'g3ml': ['torch', 'torchvision'], 
+    },
 )

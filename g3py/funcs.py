@@ -7,16 +7,16 @@ def generate_dates(start_date_str, end_date_str):
     """
 
     generates list of dates between given start date and end date including both.
- 
+
     Parameters
     ----------
- 
+
     start_date_str : str
         fmt: "YYYYMMDD"
 
     end_date_str : str
         fmt: "YYYYMMDD"
-  
+
     Returns
     -------
 
@@ -40,28 +40,28 @@ def generate_dates(start_date_str, end_date_str):
 
 def spaceAngle(theta1, phi1, theta2, phi2, rad=False):
     """
-      calculates angular distance between (theta1, phi) & (theta2, phi2).
-      all inputs should be in the units deg. if rad is set FALSE.
-      outputs are in the units deg, if rad is set FALSE.
- 
-      Parameters
-      ----------
-  
-      theta1 : float or array
-	  zenith - 1	
+    calculates angular distance between (theta1, phi) & (theta2, phi2).
+    all inputs should be in the units deg. if rad is set FALSE.
+    outputs are in the units deg, if rad is set FALSE.
 
-      phi1 : float or array
-          azimuth - 1
+    Parameters
+    ----------
 
-      theta2: float or array
-          zenith - 2
+    theta1 : float or array
+        zenith - 1
 
-      phi2: float or array
-          azimuth - 2 
-      Returns
-      -------
-      out: array 
-          angular distance 
+    phi1 : float or array
+        azimuth - 1
+
+    theta2: float or array
+        zenith - 2
+
+    phi2: float or array
+        azimuth - 2
+    Returns
+    -------
+    out: array
+        angular distance
     """
 
     if rad == False:
@@ -97,3 +97,23 @@ def distance_based_cut(CoreX, CoreY, log10NKGSize):
 
     distcut = distValues[np.digitize(log10NKGSize, NKGsizeEdges) - 1]
     return distFromMuSt < distcut
+
+
+def getDetInfo():
+    posdetno, X, Y, Z = np.loadtxt(
+        "/boson/users/common/g3analysis/misc/scdet_pos.txt",
+        usecols=(0, 1, 2, 3),
+        unpack=True,
+    )
+    DetNo = np.zeros(int(max(posdetno) + 1))
+
+    for item in posdetno:
+        DetNo[int(item)] = int(np.where(posdetno == item)[0])
+
+    DetNo = DetNo.astype(np.int32)
+
+    return DetNo, X, Y
+
+
+def gethitDetXY(hitdetNo, MyDetNo, detX, detY):
+    return detX[MyDetNo[hitdetNo]], detY[MyDetNo[hitdetNo]]

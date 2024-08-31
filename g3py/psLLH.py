@@ -4,6 +4,7 @@ from .funcs import spaceAngle as sA
 from . import CoordTransform as CT
 import pickle
 from . import IRF
+import pandas as pd
 
 
 class ps:
@@ -38,7 +39,7 @@ class ps:
 
     """
 
-    def __init__(self, Srcdec, SrcRA, data, psrcdata=None, n=0, inj = False):
+    def __init__(self, Srcdec, SrcRA, data, psrcdata=None, n=0, spec_index = 2.5,inj = False):
         """
         Constructs all the necessary attributes for the point source Likelihood obj.
 
@@ -112,10 +113,12 @@ class ps:
             self.psrc["evsindec"] = np.sin(np.radians(psrcdata["EvDec1"]))
             self.psrc["evra"] = np.radians(psrcdata["EvRa1"])
             self.psrc["evlog10Ne"] = np.log10(psrcdata["NKGSize"])
+            self.psrc["PrimaryEnergy"] = psrcdata["PrimaryEnergy"]
 
 
         self.inj = inj
         self.n = n
+        self.spec_index = spec_index   
 
         # self.gam = 2.2
 
@@ -124,7 +127,7 @@ class ps:
         Srcdec = self.Srcdec
         SrcRA = self.SrcRA
         sindec, RA = x
-        angres = np.radians(0.83)
+        angres = np.radians(3.22)
 
         spcAng = sA(
             np.arcsin(sindec), RA, np.radians(Srcdec), np.radians(SrcRA), rad=True
@@ -147,7 +150,7 @@ class ps:
 
         evlog10Ne, evsindec, evra, evangres = x
 
-        evangres = np.radians(0.83)  # evangres
+        evangres = np.radians(3.22)  # evangres
 
         spcAng = sA(
             np.arcsin(evsindec), evra, np.radians(Srcdec), np.radians(SrcRA), rad=True
@@ -502,10 +505,17 @@ class ps:
         """
         #np.random.seed(seed)
         NSrcev = np.random.poisson(self.n)
-        Nevs = len(psrcdata[list(psrcdata.keys())[0]])
-        index = np.random.choice(Nevs, NSrcev)
+        #psrcdatadf = pd.DataFrame(psrcdata)
+        
+        p = psrcdata['PrimaryEnergy']**(2.5 - self.spec_index)/np.sum( psrcdata['PrimaryEnergy']**(2.5 - self.spec_index))
+        Nevs = range(len(psrcdata[list(psrcdata.keys())[0]]))
+        
+        index = np.random.choice(Nevs, NSrcev, p = p) 
+
         out = {}
         for key in psrcdata:
             out[key] = psrcdata[key][index]
+
+        #out =  psrcdatadf.sample(NSrcev, weights= psrcdatadf['PrimaryEnergy']**(2.5 - self.spec_index))
 
         return out
